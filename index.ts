@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createJiti } from "jiti";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const jiti = createJiti(import.meta.url, { moduleCache: false });
 
@@ -23,9 +23,13 @@ export type ReminderEvent =
 	| "message_end"
 	| "model_select"
 	| "session_start"
+	| "session_before_switch"
+	| "session_before_fork"
+	| "session_before_compact"
 	| "session_compact"
-	| "session_switch"
-	| "session_fork";
+	| "session_before_tree"
+	| "session_tree"
+	| "session_shutdown";
 
 export interface ReminderContext {
 	branch: any[];
@@ -133,10 +137,17 @@ async function evaluate(
 	ctx: ExtensionContext,
 	pi: ExtensionAPI,
 ) {
-	const branch = ctx.sessionManager.getBranch();
+	const eventReminders = reminders.filter((loaded) => loaded.events.has(event));
+	if (eventReminders.length === 0) return;
 
-	for (const loaded of reminders) {
-		if (!loaded.events.has(event)) continue;
+	let branch: any[];
+	try {
+		branch = ctx.sessionManager.getBranch();
+	} catch {
+		return;
+	}
+
+	for (const loaded of eventReminders) {
 		loaded.evalCount++;
 
 		if (loaded.reminder.once && loaded.fired) continue;
@@ -208,7 +219,11 @@ export default function (pi: ExtensionAPI) {
 	pi.on("message_update", handle("message_update"));
 	pi.on("message_end", handle("message_end"));
 	pi.on("model_select", handle("model_select"));
+	pi.on("session_before_switch", handle("session_before_switch"));
+	pi.on("session_before_fork", handle("session_before_fork"));
+	pi.on("session_before_compact", handle("session_before_compact"));
 	pi.on("session_compact", handle("session_compact"));
-	pi.on("session_switch", handle("session_switch"));
-	pi.on("session_fork", handle("session_fork"));
+	pi.on("session_before_tree", handle("session_before_tree"));
+	pi.on("session_tree", handle("session_tree"));
+	pi.on("session_shutdown", handle("session_shutdown"));
 }

@@ -15,7 +15,7 @@ pi install npm:pi-system-reminders
 Create `.pi/reminders/bash-spiral.ts`:
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
   let consecutiveFailures = 0;
@@ -68,7 +68,7 @@ export default function (pi: ExtensionAPI) {
 
 ## Events
 
-16 pi lifecycle events available:
+21 pi lifecycle events available:
 
 | Event | When |
 |-------|------|
@@ -85,9 +85,13 @@ export default function (pi: ExtensionAPI) {
 | `message_end` | Message complete |
 | `model_select` | Model changed |
 | `session_start` | Session begins |
+| `session_before_switch` | Before session switch/new session |
+| `session_before_fork` | Before fork/clone |
+| `session_before_compact` | Before compaction |
 | `session_compact` | After compaction |
-| `session_switch` | Session switched |
-| `session_fork` | Session forked |
+| `session_before_tree` | Before tree navigation |
+| `session_tree` | After tree navigation |
+| `session_shutdown` | Session shutting down |
 
 Use a string or array: `on: "tool_execution_end"` or `on: ["turn_start", "turn_end"]`.
 
