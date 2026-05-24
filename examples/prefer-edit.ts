@@ -1,5 +1,6 @@
 /**
  * Remind the agent to use edit instead of write for existing files.
+ * Uses per-runtime closure state; not branch-aware after /tree, /fork, /clone, or /resume.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 

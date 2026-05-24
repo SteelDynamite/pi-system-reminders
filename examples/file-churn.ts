@@ -1,5 +1,6 @@
 /**
  * Remind the agent when it keeps editing the same file repeatedly.
+ * Uses per-runtime closure state; not branch-aware after /tree, /fork, /clone, or /resume.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 

@@ -2,6 +2,8 @@
 
 Reactive system reminders for [pi](https://github.com/badlogic/pi-mono). Claude Code has them built-in — now pi does too.
 
+No reminders are active by default. Install this extension, then copy or write reminder files in one of the discovery locations below.
+
 Drop a `.ts` file in a folder, get a reactive reminder that watches conversation state and steers the agent when conditions are met. Same DX as pi extensions — export a default function, get the full `ExtensionAPI`.
 
 ## Install
@@ -45,10 +47,28 @@ Reload pi. After 3 failed bash calls, the agent sees:
 
 ## How it works
 
-1. Extension discovers `.ts` files from `~/.pi/agent/reminders/` (global) and `.pi/reminders/` (project-local)
-2. Each file exports a function receiving `ExtensionAPI` — same as pi extensions
-3. The function returns a reminder: an event to listen on, a predicate, and a message
-4. When the predicate returns true, a `<system-reminder>` steering message is injected into the conversation
+1. Extension discovers top-level `*.ts` files and one-level directory `index.ts` files from `~/.pi/agent/reminders/` (global) and `.pi/reminders/` (project-local).
+2. Project reminders override global reminders with the same name.
+3. Each file exports a default function receiving `ExtensionAPI` — same as pi extensions.
+4. The function returns a reminder: an event to listen on, a predicate, and a message.
+5. When the predicate returns true, a `<system-reminder>` steering message is injected into the conversation with `deliverAs: "steer"` and `triggerTurn: true`.
+
+## Security
+
+Reminder files are arbitrary TypeScript and execute with your user permissions. Only use reminders from repositories you trust. Review project-local `.pi/reminders/` before running pi in an untrusted repo.
+
+## Discovery rules
+
+Loaded paths:
+
+- `~/.pi/agent/reminders/*.ts`
+- `~/.pi/agent/reminders/*/index.ts`
+- `.pi/reminders/*.ts`
+- `.pi/reminders/*/index.ts`
+
+Only top-level files and one-level `index.ts` directories are loaded. Nested files are ignored. If global and project reminders share a name, the project reminder wins.
+
+Broken reminders are reported at startup. Run `/reminders` to list loaded reminders and diagnostics.
 
 ## Reminder shape
 
@@ -68,7 +88,7 @@ export default function (pi: ExtensionAPI) {
 
 ## Events
 
-21 pi lifecycle events available:
+20 pi lifecycle events available:
 
 | Event | When |
 |-------|------|
@@ -126,3 +146,16 @@ when: ({ branch, ctx, event }) => {
 | `token-usage.ts` | Over 50% context → show token stats |
 
 Copy any example to `.pi/reminders/` to activate it.
+
+Some examples keep runtime state in closures. That state is per extension runtime and may not reflect branch changes after `/tree`, `/fork`, `/clone`, `/resume`, or compaction. Prefer deriving state from `ctx.sessionManager.getBranch()` when exact branch-aware behavior matters.
+
+Use `agent_end` for checks after an agent prompt finishes. Use `message_end` for checks tied to each finalized message.
+
+## Development
+
+```bash
+npm install
+npm run typecheck
+npm test
+npm run test:pack
+```
