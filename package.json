@@ -18,5 +18,14 @@
   "license": "MIT",
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "typecheck": "tsc --noEmit",
+    "test:pack": "npm pack --dry-run --json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
   }
 }
