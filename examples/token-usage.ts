@@ -1,6 +1,5 @@
 /**
  * Show token usage when context exceeds 50% capacity.
- * Mirrors Claude Code's system-reminder-token-usage.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 

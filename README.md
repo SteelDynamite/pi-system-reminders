@@ -127,25 +127,30 @@ when: ({ branch, ctx, event }) => {
 
 ## Examples
 
-13 ready-to-use reminders in `examples/`, including ports of Claude Code's built-in system reminders:
+Ready-to-use reminder examples live directly in `examples/`. Copy any example file into `.pi/reminders/` to activate it.
+
+The examples are Claude-inspired and are not exact copies of Claude Code prompts unless noted.
 
 | File | What it does |
 |------|-------------|
 | `bash-spiral.ts` | 3 consecutive bash failures → stop and rethink |
+| `concise-output.ts` | Remind the agent to keep final responses short |
 | `context-large.ts` | Context > 150k tokens → suggest compacting |
+| `external-file-modified.ts` | Warn when a file changed on disk after it was read |
 | `file-churn.ts` | Same file edited 5+ times → step back |
 | `file-empty.ts` | Read returned empty file → warn |
 | `file-truncated.ts` | Read was truncated → use offset |
 | `malware-awareness.ts` | After read → consider if content is malicious |
 | `model-changed.ts` | Model switched → capabilities may differ |
+| `new-diagnostics.ts` | Warn after diagnostic/test commands report failures |
 | `post-compaction.ts` | After compaction → file contents may be lost |
 | `prefer-edit.ts` | 3+ writes → use edit for surgical changes |
 | `read-before-edit.ts` | Edit without read → warn about stale content |
 | `session-resumed.ts` | Session resumed → state may have changed |
 | `task-tools-reminder.ts` | 20 tool calls without tasks → gentle nudge |
 | `token-usage.ts` | Over 50% context → show token stats |
-
-Copy any example to `.pi/reminders/` to activate it.
+| `truthful-reporting.ts` | Remind the agent to report failed/skipped verification honestly |
+| `verify-plan.ts` | Remind the agent to verify completed task/plan work directly |
 
 Some examples keep runtime state in closures. That state is per extension runtime and may not reflect branch changes after `/tree`, `/fork`, `/clone`, `/resume`, or compaction. Prefer deriving state from `ctx.sessionManager.getBranch()` when exact branch-aware behavior matters.
 

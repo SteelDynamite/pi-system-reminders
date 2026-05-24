@@ -1,6 +1,5 @@
 /**
  * Warn when a read returns an empty file.
- * Mirrors Claude Code's system-reminder-file-exists-but-empty.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
