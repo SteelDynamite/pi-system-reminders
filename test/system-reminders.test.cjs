@@ -60,6 +60,10 @@ function fakeCtx(cwd, branch = []) {
   };
 }
 
+function writeProjectReminder(cwd, source, name = 'example.ts') {
+  write(path.join(cwd, '.pi', 'reminders', name), source);
+}
+
 test('discovers global reminders', () => withAgentDir((agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'global.ts'), 'export default () => ({ on: "turn_end", when: () => false, message: "global" });');
@@ -185,19 +189,145 @@ test('runtime reminder errors report diagnostics', async () => {
   assert.equal(pi.messages.length, 0);
   assert.equal(diagnostics.length, 1);
   assert.equal(diagnostics[0].phase, 'when');
-} );
+});
 
 test('reminder factories are not loaded before session_start', async () => {
   await withAgentDir(async (agentDir) => {
-  const cwd = tempDir();
-  write(path.join(agentDir, 'reminders', 'hook.ts'), 'export default (pi) => { pi.on("tool_result", () => {}); return { on: "turn_end", when: () => false, message: "x" }; };');
-  const pi = fakePi();
-  const ctx = fakeCtx(cwd, [{}]);
+    const cwd = tempDir();
+    write(path.join(agentDir, 'reminders', 'hook.ts'), 'export default (pi) => { pi.on("tool_result", () => {}); return { on: "turn_end", when: () => false, message: "x" }; };');
+    const pi = fakePi();
+    const ctx = fakeCtx(cwd, [{}]);
 
-  mod.default(pi);
+    mod.default(pi);
 
-  assert.equal(pi.handlers.get('tool_result')?.length ?? 0, 1, 'only extension handler exists before session_start');
-  await pi.handlers.get('session_start')[0]({}, ctx);
-  assert.equal(pi.handlers.get('tool_result').length, 2, 'reminder hook is added once during session_start');
+    assert.equal(pi.handlers.get('tool_result')?.length ?? 0, 1, 'only extension handler exists before session_start');
+    await pi.handlers.get('session_start')[0]({}, ctx);
+    assert.equal(pi.handlers.get('tool_result').length, 2, 'reminder hook is added once during session_start');
   });
 });
+
+test('does not read the branch when no reminders match the event', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, `
+    export default () => ({
+      on: "tool_call",
+      when: () => true,
+      message: "tool reminder",
+    });
+  `);
+  const pi = fakePi();
+  mod.default(pi);
+
+  const ctx = {
+    cwd,
+    ui: { notify() {} },
+    sessionManager: {
+      getBranch() {
+        throw new Error('getBranch should not be called');
+      },
+    },
+  };
+
+  await pi.handlers.get('session_start')[0]({}, ctx);
+  await pi.handlers.get('message_end')[0]({}, ctx);
+
+  assert.equal(pi.messages.length, 0);
+}));
+
+test('skips matching reminders when branch lookup is unavailable', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, `
+    export default () => ({
+      on: "message_end",
+      when: () => true,
+      message: "message reminder",
+    });
+  `);
+  const pi = fakePi();
+  mod.default(pi);
+
+  const ctx = {
+    cwd,
+    ui: { notify() {} },
+    sessionManager: {
+      getBranch() {
+        throw new Error('branch unavailable');
+      },
+    },
+  };
+
+  await pi.handlers.get('session_start')[0]({}, ctx);
+  await pi.handlers.get('message_end')[0]({}, ctx);
+
+  assert.equal(pi.messages.length, 0);
+}));
+
+test('fires a matching reminder when branch lookup succeeds', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, `
+    export default () => ({
+      on: "message_end",
+      when: ({ branch, event }) => branch[0].role === "user" && event.done === true,
+      message: ({ branch }) => "branch length " + branch.length,
+    });
+  `);
+  const pi = fakePi();
+  mod.default(pi);
+
+  let getBranchCalls = 0;
+  const ctx = {
+    cwd,
+    ui: { notify() {} },
+    sessionManager: {
+      getBranch() {
+        getBranchCalls++;
+        return [{ role: 'user', content: 'hello' }];
+      },
+    },
+  };
+
+  await pi.handlers.get('session_start')[0]({}, ctx);
+  await pi.handlers.get('message_end')[0]({ done: true }, ctx);
+
+  assert.equal(getBranchCalls, 1);
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /<system-reminder name="example">\nbranch length 1\n<\/system-reminder>/);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: true });
+}));
+
+test('evaluates only reminders matching the current event', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, `
+    export default () => [
+      {
+        on: "message_end",
+        when: () => true,
+        message: "matching reminder",
+      },
+      {
+        on: "tool_call",
+        when: () => { throw new Error("non-matching reminder should not run"); },
+        message: "non-matching reminder",
+      },
+    ];
+  `);
+  const pi = fakePi();
+  mod.default(pi);
+
+  const ctx = {
+    cwd,
+    ui: { notify() {} },
+    sessionManager: {
+      getBranch() {
+        return [];
+      },
+    },
+  };
+
+  await pi.handlers.get('session_start')[0]({}, ctx);
+  await pi.handlers.get('message_end')[0]({}, ctx);
+
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /matching reminder/);
+  assert.doesNotMatch(pi.messages[0].message.content, /non-matching reminder/);
+}));
