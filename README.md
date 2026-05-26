@@ -133,6 +133,7 @@ The examples are Claude-inspired and are not exact copies of Claude Code prompts
 
 | File | What it does |
 |------|-------------|
+| `background-subagents.ts` | Background subagent spawned → avoid duplicating its work |
 | `bash-failed-truncated.ts` | Failed bash output was truncated → inspect full log if needed |
 | `bash-spiral.ts` | 3 consecutive bash failures → stop and rethink |
 | `concise-output.ts` | Remind the agent to keep final responses short |

@@ -367,6 +367,52 @@ async function runExampleReminder(exampleName, toolResultEvent) {
   return { pi, diagnostics };
 }
 
+test('background-subagents fires after successful background Agent spawn', async () => {
+  const { pi, diagnostics } = await runExampleReminder('background-subagents', {
+    type: 'tool_result',
+    toolName: 'Agent',
+    toolCallId: '1',
+    input: { prompt: 'Find auth files', description: 'Find auth', subagent_type: 'Explore', run_in_background: true },
+    content: [{ type: 'text', text: 'Agent started in background.' }],
+    details: { status: 'background', agentId: 'agent-1' },
+    isError: false,
+  });
+
+  assert.equal(diagnostics.length, 0);
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /background subagents/);
+  assert.match(pi.messages[0].message.content, /Avoid duplicating their work/);
+  assert.match(pi.messages[0].message.content, /get_subagent_result/);
+});
+
+test('background-subagents ignores foreground Agent spawn', async () => {
+  const { pi } = await runExampleReminder('background-subagents', {
+    type: 'tool_result',
+    toolName: 'Agent',
+    toolCallId: '1',
+    input: { prompt: 'Find auth files', description: 'Find auth', subagent_type: 'Explore', run_in_background: false },
+    content: [{ type: 'text', text: 'Agent completed.' }],
+    details: { status: 'completed' },
+    isError: false,
+  });
+
+  assert.equal(pi.messages.length, 0);
+});
+
+test('background-subagents ignores failed background Agent spawn', async () => {
+  const { pi } = await runExampleReminder('background-subagents', {
+    type: 'tool_result',
+    toolName: 'Agent',
+    toolCallId: '1',
+    input: { prompt: 'Find auth files', description: 'Find auth', subagent_type: 'Explore', run_in_background: true },
+    content: [{ type: 'text', text: 'Agent failed.' }],
+    details: undefined,
+    isError: true,
+  });
+
+  assert.equal(pi.messages.length, 0);
+});
+
 test('bash-failed-truncated fires on failed bash with truncation details', async () => {
   const { pi, diagnostics } = await runExampleReminder('bash-failed-truncated', {
     type: 'tool_result',
