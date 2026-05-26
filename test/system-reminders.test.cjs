@@ -84,6 +84,17 @@ test('discovers project reminders', () => withAgentDir(() => {
   assert.deepEqual(result.reminders.map((r) => r.name), ['project']);
 }));
 
+test('skips reminder discovery paths that are files', () => withAgentDir((agentDir) => {
+  const cwd = tempDir();
+  fs.writeFileSync(path.join(agentDir, 'reminders'), 'not a directory');
+  write(path.join(cwd, '.pi', 'reminders', 'project.ts'), 'export default () => ({ on: "turn_end", when: () => false, message: "project" });');
+
+  const result = mod.loadReminders(fakePi(), cwd);
+
+  assert.equal(result.diagnostics.length, 0);
+  assert.deepEqual(result.reminders.map((r) => r.name), ['project']);
+}));
+
 test('project reminder overrides global reminder with same name', () => withAgentDir((agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'same.ts'), 'export default () => ({ on: "turn_end", when: () => true, message: "global" });');
@@ -93,7 +104,7 @@ test('project reminder overrides global reminder with same name', () => withAgen
 
   assert.equal(result.diagnostics.length, 0);
   assert.equal(result.reminders.length, 1);
-  assert.match(result.reminders[0].path, /\.pi\/reminders\/same\.ts$/);
+  assert.match(result.reminders[0].path.replace(/\\/g, '/'), /\.pi\/reminders\/same\.ts$/);
 }));
 
 test('cooldown and once suppress repeated firing', async () => {

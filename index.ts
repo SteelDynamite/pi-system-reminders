@@ -103,6 +103,7 @@ export function discoverReminderFiles(cwd: string): { path: string; name: string
 
 	for (const dir of dirs) {
 		if (!fs.existsSync(dir)) continue;
+		if (!fs.statSync(dir).isDirectory()) continue;
 
 		const entries = fs.readdirSync(dir, { withFileTypes: true });
 		for (const entry of entries) {
