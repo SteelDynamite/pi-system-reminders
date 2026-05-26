@@ -342,3 +342,87 @@ test('evaluates only reminders matching the current event', () => withAgentDir(a
   assert.match(pi.messages[0].message.content, /matching reminder/);
   assert.doesNotMatch(pi.messages[0].message.content, /non-matching reminder/);
 }));
+
+async function runExampleReminder(exampleName, toolResultEvent) {
+  const pi = fakePi();
+  const factory = jiti(`../examples/${exampleName}.ts`).default;
+  const reminder = factory(pi);
+  const loaded = {
+    name: exampleName,
+    reminder,
+    events: new Set([reminder.on]),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: `/tmp/${exampleName}.ts`,
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+
+  for (const handler of pi.handlers.get('tool_result') ?? []) {
+    await handler(toolResultEvent, ctx);
+  }
+  await mod.evaluate('tool_execution_end', [loaded], diagnostics, { toolName: toolResultEvent.toolName }, ctx, pi);
+
+  return { pi, diagnostics };
+}
+
+test('bash-failed-truncated fires on failed bash with truncation details', async () => {
+  const { pi, diagnostics } = await runExampleReminder('bash-failed-truncated', {
+    type: 'tool_result',
+    toolName: 'bash',
+    toolCallId: '1',
+    input: { command: 'npm test' },
+    content: [{ type: 'text', text: 'tail output' }],
+    details: { truncation: { truncated: true }, fullOutputPath: '/tmp/pi-bash.log' },
+    isError: true,
+  });
+
+  assert.equal(diagnostics.length, 0);
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /Bash output was truncated and the command failed/);
+  assert.match(pi.messages[0].message.content, /Full output: \/tmp\/pi-bash\.log/);
+});
+
+test('bash-failed-truncated fires on failed bash with full output marker', async () => {
+  const { pi } = await runExampleReminder('bash-failed-truncated', {
+    type: 'tool_result',
+    toolName: 'bash',
+    toolCallId: '1',
+    input: { command: 'npm test' },
+    content: [{ type: 'text', text: 'tail\n[Showing lines 1-2 of 3. Full output: C:\\Temp\\pi-bash.log]' }],
+    details: undefined,
+    isError: true,
+  });
+
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /C:\\Temp\\pi-bash\.log/);
+});
+
+test('bash-failed-truncated ignores successful truncated bash', async () => {
+  const { pi } = await runExampleReminder('bash-failed-truncated', {
+    type: 'tool_result',
+    toolName: 'bash',
+    toolCallId: '1',
+    input: { command: 'printf lots' },
+    content: [{ type: 'text', text: '[Showing lines 1-2 of 3. Full output: /tmp/pi-bash.log]' }],
+    details: { truncation: { truncated: true }, fullOutputPath: '/tmp/pi-bash.log' },
+    isError: false,
+  });
+
+  assert.equal(pi.messages.length, 0);
+});
+
+test('bash-failed-truncated ignores normal failed bash', async () => {
+  const { pi } = await runExampleReminder('bash-failed-truncated', {
+    type: 'tool_result',
+    toolName: 'bash',
+    toolCallId: '1',
+    input: { command: 'false' },
+    content: [{ type: 'text', text: 'Command exited with code 1' }],
+    details: undefined,
+    isError: true,
+  });
+
+  assert.equal(pi.messages.length, 0);
+});
