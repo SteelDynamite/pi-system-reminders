@@ -92,6 +92,8 @@ export interface ReminderLoadResult {
 	diagnostics: ReminderDiagnostic[];
 }
 
+// Intentional: reminders are executable TypeScript modules, like pi extensions.
+// This is a trust boundary, not a sandbox; docs warn users to review reminder files.
 export function discoverReminderFiles(cwd: string): { path: string; name: string }[] {
 	const agentDir = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
 	const dirs = [

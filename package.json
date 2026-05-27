@@ -11,6 +11,11 @@
   "keywords": [
     "pi-package"
   ],
+  "files": [
+    "index.ts",
+    "examples",
+    "README.md"
+  ],
   "pi": {
     "extensions": [
       "./index.ts"
