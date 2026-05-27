@@ -367,6 +367,59 @@ async function runExampleReminder(exampleName, toolResultEvent) {
   return { pi, diagnostics };
 }
 
+test('prefer-edit counts writes per agent round and fires once', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/prefer-edit.ts').default;
+  const reminder = factory(pi);
+  const loaded = {
+    name: 'prefer-edit',
+    reminder,
+    events: new Set([reminder.on]),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/prefer-edit.ts',
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+  const writeResult = { type: 'tool_result', toolName: 'write', isError: false };
+
+  const emit = async (event, data) => {
+    for (const handler of pi.handlers.get(event) ?? []) {
+      await handler(data, ctx);
+    }
+  };
+  const evaluate = async () => {
+    await mod.evaluate('tool_execution_end', [loaded], diagnostics, { toolName: 'write' }, ctx, pi);
+  };
+
+  await emit('agent_start', {});
+  await emit('tool_result', writeResult);
+  await evaluate();
+  await emit('tool_result', writeResult);
+  await evaluate();
+  assert.equal(pi.messages.length, 0);
+
+  await emit('tool_result', writeResult);
+  await evaluate();
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /3\+ times this round/);
+
+  await emit('tool_result', writeResult);
+  await evaluate();
+  assert.equal(pi.messages.length, 1);
+
+  await emit('agent_start', {});
+  await emit('tool_result', writeResult);
+  await evaluate();
+  await emit('tool_result', writeResult);
+  await evaluate();
+  await emit('tool_result', writeResult);
+  await evaluate();
+  assert.equal(pi.messages.length, 2);
+  assert.equal(diagnostics.length, 0);
+});
+
 test('background-subagents fires after successful background Agent spawn', async () => {
   const { pi, diagnostics } = await runExampleReminder('background-subagents', {
     type: 'tool_result',
