@@ -78,6 +78,7 @@ export interface LoadedReminder {
 	evalCount: number;
 	lastFiredAt: number;
 	fired: boolean;
+	hydratedFromBranch: boolean;
 	path: string;
 }
 
@@ -191,6 +192,7 @@ export function loadReminders(pi: ExtensionAPI, cwd: string): ReminderLoadResult
 					evalCount: 0,
 					lastFiredAt: -Infinity,
 					fired: false,
+					hydratedFromBranch: false,
 					path: file.path,
 				});
 			}
@@ -217,6 +219,21 @@ export function escapeXmlContent(value: string): string {
 		.replace(/>/g, "&gt;");
 }
 
+function hydrateReminderFromBranch(loaded: LoadedReminder, branch: any[]) {
+	if (loaded.hydratedFromBranch) return;
+	loaded.hydratedFromBranch = true;
+
+	const firedInBranch = branch.some((entry) =>
+		entry?.type === "custom_message" &&
+		entry.customType === "system-reminder" &&
+		entry.details?.name === loaded.name
+	);
+	if (!firedInBranch) return;
+
+	loaded.fired = true;
+	loaded.lastFiredAt = loaded.evalCount;
+}
+
 export async function evaluate(
 	event: ReminderEvent,
 	reminders: LoadedReminder[],
@@ -236,6 +253,7 @@ export async function evaluate(
 	}
 
 	for (const loaded of eventReminders) {
+		hydrateReminderFromBranch(loaded, branch);
 		loaded.evalCount++;
 
 		if (loaded.reminder.once && loaded.fired) continue;

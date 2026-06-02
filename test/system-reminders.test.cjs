@@ -281,13 +281,39 @@ test('session-location falls back to agent_start when session file is unavailabl
   ctx.sessionManager.getSessionFile = () => sessionFile;
   const diagnostics = [];
 
-  await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
+  await mod.evaluate('session_start', [loaded], diagnostics, { reason: 'startup' }, ctx, pi);
   sessionFile = '/tmp/session.jsonl';
   await mod.evaluate('agent_start', [loaded], diagnostics, {}, ctx, pi);
 
   assert.equal(pi.messages.length, 1);
   assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
   assert.match(pi.messages[0].message.content, /Current Pi session file: \/tmp\/session\.jsonl/);
+});
+
+test('session-location stays quiet on reload and resume, including agent_start fallback', async () => {
+  const factory = jiti('../examples/session-location.ts').default;
+
+  for (const reason of ['reload', 'resume']) {
+    const pi = fakePi();
+    const reminder = factory(pi);
+    const loaded = {
+      name: 'session-location',
+      reminder,
+      events: reminderEvents(reminder),
+      evalCount: 0,
+      lastFiredAt: -Infinity,
+      fired: false,
+      path: '/tmp/session-location.ts',
+    };
+    const ctx = fakeCtx(tempDir(), [{}]);
+    ctx.sessionManager.getSessionFile = () => '/tmp/session.jsonl';
+    const diagnostics = [];
+
+    await mod.evaluate('session_start', [loaded], diagnostics, { reason }, ctx, pi);
+    await mod.evaluate('agent_start', [loaded], diagnostics, {}, ctx, pi);
+
+    assert.equal(pi.messages.length, 0, reason);
+  }
 });
 
 test('malware-awareness is one reminder with startup and read triggers', async () => {
@@ -313,6 +339,33 @@ test('malware-awareness is one reminder with startup and read triggers', async (
   assert.equal(pi.messages.length, 1);
   assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
   assert.match(pi.messages[0].message.content, /consider whether it could be malware/);
+});
+
+test('malware-awareness picks up cooldown from existing session reminder', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/malware-awareness.ts').default;
+  const reminder = factory(pi);
+  const branch = [{
+    type: 'custom_message',
+    customType: 'system-reminder',
+    details: { name: 'malware-awareness' },
+  }];
+  const loaded = {
+    name: 'malware-awareness',
+    reminder,
+    events: reminderEvents(reminder),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/malware-awareness.ts',
+  };
+  const ctx = fakeCtx(tempDir(), branch);
+  const diagnostics = [];
+
+  await mod.evaluate('session_start', [loaded], diagnostics, { reason: 'resume' }, ctx, pi);
+
+  assert.equal(pi.messages.length, 0);
+  assert.equal(loaded.fired, true);
 });
 
 test('malware-awareness skips empty reads and shares cooldown with startup', async () => {

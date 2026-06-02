@@ -149,14 +149,14 @@ The examples are Claude-inspired and are not exact copies of Claude Code prompts
 | `post-compaction.ts` | After compaction → file contents may be lost |
 | `prefer-edit.ts` | 3+ writes → use edit for surgical changes |
 | `read-before-edit.ts` | Edit without read → warn about stale content |
-| `session-location.ts` | Startup, with first-turn fallback → report the active Pi session file |
+| `session-location.ts` | Startup/new session, with first-turn fallback → report the active Pi session file; quiet on `/reload` and `/resume` |
 | `session-resumed.ts` | Session resumed → state may have changed |
 | `task-tools-reminder.ts` | 20 tool calls without tasks → gentle nudge |
 | `token-usage.ts` | Over 50% context → show token stats |
 | `truthful-reporting.ts` | Remind the agent to report failed/skipped verification honestly |
 | `verify-plan.ts` | Remind the agent to verify completed task/plan work directly |
 
-Some examples keep runtime state in closures. That state is per extension runtime and may not reflect branch changes after `/tree`, `/fork`, `/clone`, `/resume`, or compaction. Prefer deriving state from `ctx.sessionManager.getBranch()` when exact branch-aware behavior matters.
+Some examples keep runtime state in closures. That state is per extension runtime and may not reflect branch changes after `/tree`, `/fork`, `/clone`, `/resume`, `/reload`, or compaction. On reload/resume, reminders restore `once` and cooldown state from prior `<system-reminder>` messages on the active branch, but skipped evaluation counts are not reconstructed. Prefer deriving state from `ctx.sessionManager.getBranch()` when exact branch-aware behavior matters.
 
 Use `agent_end` for checks after an agent prompt finishes. Use `message_end` for checks tied to each finalized message.
 
