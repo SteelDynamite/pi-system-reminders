@@ -148,6 +148,7 @@ The examples are Claude-inspired and are not exact copies of Claude Code prompts
 | `post-compaction.ts` | After compaction → file contents may be lost |
 | `prefer-edit.ts` | 3+ writes → use edit for surgical changes |
 | `read-before-edit.ts` | Edit without read → warn about stale content |
+| `session-location.ts` | First agent turn → report the active Pi session file |
 | `session-resumed.ts` | Session resumed → state may have changed |
 | `task-tools-reminder.ts` | 20 tool calls without tasks → gentle nudge |
 | `token-usage.ts` | Over 50% context → show token stats |
