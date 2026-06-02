@@ -30,6 +30,7 @@
   "author": "michaelliv",
   "license": "MIT",
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0"
   }

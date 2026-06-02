@@ -49,7 +49,7 @@ Reload pi. After 3 failed bash calls, the agent sees:
 
 1. Extension discovers top-level `*.ts` files and one-level directory `index.ts` files from `~/.pi/agent/reminders/` (global) and `.pi/reminders/` (project-local).
 2. Project reminders override global reminders with the same name.
-3. Each file exports a default function receiving `ExtensionAPI` — same as pi extensions.
+3. Each file exports a sync or async default function receiving `ExtensionAPI` — same as pi extensions.
 4. The function returns a reminder: an event to listen on, a predicate, and a message.
 5. When the predicate returns true, a `<system-reminder>` steering message is injected into the conversation with `deliverAs: "steer"` and `triggerTurn: true` by default.
 
@@ -68,7 +68,7 @@ Loaded paths:
 
 Only top-level files and one-level `index.ts` directories are loaded. Nested files are ignored. If global and project reminders share a name, the project reminder wins.
 
-Broken reminders are reported at startup. Run `/reminders` to list loaded reminders and diagnostics.
+Broken reminders are reported at startup. Run `/reminders` to list loaded reminders and diagnostics. Runtime diagnostics are deduplicated and capped to keep the report readable.
 
 ## Reminder shape
 
@@ -78,41 +78,50 @@ export default function (pi: ExtensionAPI) {
 
   return {
     on: "tool_execution_end",           // event(s) to evaluate on
-    when: ({ branch, ctx, event }) => boolean,  // fire?
-    message: "text" | (rc) => "text",   // what to inject
-    cooldown: 5,                        // skip N evaluations after firing
-    once: true,                         // fire only once per session
-    triggerTurn: false,                 // optional: do not start a follow-up turn
+    when: ({ branch, ctx, event }) => boolean,  // fire? must return boolean
+    message: "text" | (rc) => "text",   // what to inject; must be string
+    cooldown: 5,                        // non-negative integer; skip N evaluations after firing
+    once: true,                         // boolean; fire only once per session
+    triggerTurn: false,                 // boolean; optional: do not start a follow-up turn
   };
 }
 ```
 
 ## Events
 
-20 pi lifecycle events available:
+All current pi extension events are available:
 
 | Event | When |
 |-------|------|
-| `agent_start` | Agent loop begins |
-| `agent_end` | Agent loop ends |
-| `tool_call` | Before tool executes |
-| `tool_result` | After tool returns |
-| `tool_execution_start` | Tool execution begins |
-| `tool_execution_end` | Tool execution ends |
-| `turn_start` | Before LLM call |
-| `turn_end` | After turn completes |
-| `message_start` | Message begins |
-| `message_update` | Streaming update |
-| `message_end` | Message complete |
-| `model_select` | Model changed |
+| `resources_discover` | Resource discovery begins |
 | `session_start` | Session begins |
 | `session_before_switch` | Before session switch/new session |
 | `session_before_fork` | Before fork/clone |
 | `session_before_compact` | Before compaction |
 | `session_compact` | After compaction |
+| `session_shutdown` | Session shutting down |
 | `session_before_tree` | Before tree navigation |
 | `session_tree` | After tree navigation |
-| `session_shutdown` | Session shutting down |
+| `context` | Before LLM context is sent |
+| `before_provider_request` | Before provider request |
+| `after_provider_response` | After provider response headers |
+| `before_agent_start` | Before agent loop starts |
+| `agent_start` | Agent loop begins |
+| `agent_end` | Agent loop ends |
+| `turn_start` | Before LLM call |
+| `turn_end` | After turn completes |
+| `message_start` | Message begins |
+| `message_update` | Streaming update |
+| `message_end` | Message complete |
+| `tool_execution_start` | Tool execution begins |
+| `tool_execution_update` | Tool execution update |
+| `tool_execution_end` | Tool execution ends |
+| `model_select` | Model changed |
+| `thinking_level_select` | Thinking level changed |
+| `tool_call` | Before tool executes |
+| `tool_result` | After tool returns |
+| `user_bash` | User `!`/`!!` bash command |
+| `input` | User input received |
 
 Use a string or array: `on: "tool_execution_end"` or `on: ["turn_start", "turn_end"]`.
 

@@ -17,12 +17,12 @@ function write(file, content) {
   fs.writeFileSync(file, content);
 }
 
-function withAgentDir(fn) {
+async function withAgentDir(fn) {
   const prev = process.env.PI_CODING_AGENT_DIR;
   const dir = tempDir();
   process.env.PI_CODING_AGENT_DIR = dir;
   try {
-    return fn(dir);
+    return await fn(dir);
   } finally {
     if (prev === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = prev;
@@ -68,43 +68,43 @@ function reminderEvents(reminder) {
   return new Set(Array.isArray(reminder.on) ? reminder.on : [reminder.on]);
 }
 
-test('discovers global reminders', () => withAgentDir((agentDir) => {
+test('discovers global reminders', () => withAgentDir(async (agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'global.ts'), 'export default () => ({ on: "turn_end", when: () => false, message: "global" });');
 
-  const result = mod.loadReminders(fakePi(), cwd);
+  const result = await mod.loadReminders(fakePi(), cwd);
 
   assert.equal(result.diagnostics.length, 0);
   assert.deepEqual(result.reminders.map((r) => r.name), ['global']);
 }));
 
-test('discovers project reminders', () => withAgentDir(() => {
+test('discovers project reminders', () => withAgentDir(async () => {
   const cwd = tempDir();
   write(path.join(cwd, '.pi', 'reminders', 'project.ts'), 'export default () => ({ on: "turn_end", when: () => false, message: "project" });');
 
-  const result = mod.loadReminders(fakePi(), cwd);
+  const result = await mod.loadReminders(fakePi(), cwd);
 
   assert.equal(result.diagnostics.length, 0);
   assert.deepEqual(result.reminders.map((r) => r.name), ['project']);
 }));
 
-test('skips reminder discovery paths that are files', () => withAgentDir((agentDir) => {
+test('skips reminder discovery paths that are files', () => withAgentDir(async (agentDir) => {
   const cwd = tempDir();
   fs.writeFileSync(path.join(agentDir, 'reminders'), 'not a directory');
   write(path.join(cwd, '.pi', 'reminders', 'project.ts'), 'export default () => ({ on: "turn_end", when: () => false, message: "project" });');
 
-  const result = mod.loadReminders(fakePi(), cwd);
+  const result = await mod.loadReminders(fakePi(), cwd);
 
   assert.equal(result.diagnostics.length, 0);
   assert.deepEqual(result.reminders.map((r) => r.name), ['project']);
 }));
 
-test('project reminder overrides global reminder with same name', () => withAgentDir((agentDir) => {
+test('project reminder overrides global reminder with same name', () => withAgentDir(async (agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'same.ts'), 'export default () => ({ on: "turn_end", when: () => true, message: "global" });');
   write(path.join(cwd, '.pi', 'reminders', 'same.ts'), 'export default () => ({ on: "turn_end", when: () => true, message: "project" });');
 
-  const result = mod.loadReminders(fakePi(), cwd);
+  const result = await mod.loadReminders(fakePi(), cwd);
 
   assert.equal(result.diagnostics.length, 0);
   assert.equal(result.reminders.length, 1);
@@ -411,16 +411,123 @@ test('malware-awareness skips empty reads and shares cooldown with startup', asy
   assert.equal(pi2.messages.length, 1);
 });
 
-test('malformed reminder reports diagnostics', () => withAgentDir((agentDir) => {
+test('malformed reminder reports diagnostics', () => withAgentDir(async (agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'broken.ts'), 'export default () => ({ on: "not_an_event", when: () => true, message: "x" });');
 
-  const result = mod.loadReminders(fakePi(), cwd);
+  const result = await mod.loadReminders(fakePi(), cwd);
 
   assert.equal(result.reminders.length, 0);
   assert.equal(result.diagnostics.length, 1);
   assert.equal(result.diagnostics[0].phase, 'validate');
 }));
+
+test('async reminder factories are supported', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, 'export default async () => ({ on: "turn_end", when: () => true, message: "async" });');
+
+  const result = await mod.loadReminders(fakePi(), cwd);
+
+  assert.equal(result.diagnostics.length, 0);
+  assert.equal(result.reminders.length, 1);
+  assert.equal(result.reminders[0].reminder.message, 'async');
+}));
+
+test('validates reminder options', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, `
+    export default () => [
+      { on: "turn_end", when: () => true, message: "x", cooldown: -1 },
+      { on: "turn_end", when: () => true, message: "x", once: "yes" },
+      { on: "turn_end", when: () => true, message: "x", triggerTurn: "no" },
+    ];
+  `);
+
+  const result = await mod.loadReminders(fakePi(), cwd);
+
+  assert.equal(result.reminders.length, 0);
+  assert.equal(result.diagnostics.length, 3);
+  assert.match(result.diagnostics[0].message, /cooldown/);
+  assert.match(result.diagnostics[1].message, /once/);
+  assert.match(result.diagnostics[2].message, /triggerTurn/);
+}));
+
+test('supports newer pi events', () => withAgentDir(async () => {
+  const cwd = tempDir();
+  writeProjectReminder(cwd, 'export default () => ({ on: "tool_execution_update", when: () => true, message: "update" });');
+  const pi = fakePi();
+  const ctx = fakeCtx(cwd, [{}]);
+
+  mod.default(pi);
+  await pi.handlers.get('session_start')[0]({ type: 'session_start', reason: 'startup' }, ctx);
+  await pi.handlers.get('tool_execution_update')[0]({ type: 'tool_execution_update', toolName: 'bash' }, ctx);
+
+  assert.equal(pi.messages.length, 1);
+  assert.match(pi.messages[0].message.content, /update/);
+}));
+
+test('invalid runtime return values report deduped diagnostics', async () => {
+  const pi = fakePi();
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+  const reminders = [{
+    name: 'bad-return',
+    reminder: { on: 'turn_end', when: () => 'yes', message: () => 123 },
+    events: new Set(['turn_end']),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/bad-return.ts',
+  }];
+
+  await mod.evaluate('turn_end', reminders, diagnostics, {}, ctx, pi);
+  await mod.evaluate('turn_end', reminders, diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 0);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].phase, 'when');
+  assert.equal(diagnostics[0].count, 2);
+});
+
+test('runtime diagnostics are capped', async () => {
+  const pi = fakePi();
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+  const reminders = Array.from({ length: 60 }, (_, i) => ({
+    name: `throws-${i}`,
+    reminder: { on: 'turn_end', when: () => { throw new Error(`bad-${i}`); }, message: 'hello' },
+    events: new Set(['turn_end']),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: `/tmp/throws-${i}.ts`,
+  }));
+
+  await mod.evaluate('turn_end', reminders, diagnostics, {}, ctx, pi);
+
+  assert.equal(diagnostics.length, 50);
+});
+
+test('message functions must return strings', async () => {
+  const pi = fakePi();
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+  const reminders = [{
+    name: 'bad-message',
+    reminder: { on: 'turn_end', when: () => true, message: () => 123 },
+    events: new Set(['turn_end']),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/bad-message.ts',
+  }];
+
+  await mod.evaluate('turn_end', reminders, diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 0);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].phase, 'message');
+});
 
 test('runtime reminder errors report diagnostics', async () => {
   const pi = fakePi();

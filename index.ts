@@ -5,71 +5,64 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createJiti } from "jiti";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ExtensionEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
 
 const jiti = createJiti(__filename, { moduleCache: false });
 
-export type ReminderEvent =
-	| "agent_start"
-	| "agent_end"
-	| "tool_call"
-	| "tool_result"
-	| "tool_execution_start"
-	| "tool_execution_end"
-	| "turn_start"
-	| "turn_end"
-	| "message_start"
-	| "message_update"
-	| "message_end"
-	| "model_select"
-	| "session_start"
-	| "session_before_switch"
-	| "session_before_fork"
-	| "session_before_compact"
-	| "session_compact"
-	| "session_before_tree"
-	| "session_tree"
-	| "session_shutdown";
-
-const REMINDER_EVENTS: ReadonlySet<string> = new Set([
-	"agent_start",
-	"agent_end",
-	"tool_call",
-	"tool_result",
-	"tool_execution_start",
-	"tool_execution_end",
-	"turn_start",
-	"turn_end",
-	"message_start",
-	"message_update",
-	"message_end",
-	"model_select",
+const REMINDER_EVENTS = [
+	"resources_discover",
 	"session_start",
 	"session_before_switch",
 	"session_before_fork",
 	"session_before_compact",
 	"session_compact",
+	"session_shutdown",
 	"session_before_tree",
 	"session_tree",
-	"session_shutdown",
-]);
+	"context",
+	"before_provider_request",
+	"after_provider_response",
+	"before_agent_start",
+	"agent_start",
+	"agent_end",
+	"turn_start",
+	"turn_end",
+	"message_start",
+	"message_update",
+	"message_end",
+	"tool_execution_start",
+	"tool_execution_update",
+	"tool_execution_end",
+	"model_select",
+	"thinking_level_select",
+	"tool_call",
+	"tool_result",
+	"user_bash",
+	"input",
+] as const;
 
-export interface ReminderContext {
-	branch: any[];
+const REMINDER_EVENT_NAMES: ReadonlySet<string> = new Set(REMINDER_EVENTS);
+const SPECIAL_REMINDER_EVENTS = new Set<ReminderEvent>(["session_start", "before_agent_start"]);
+
+export type ReminderEvent = typeof REMINDER_EVENTS[number];
+export type ReminderEventData<E extends ReminderEvent = ReminderEvent> = Extract<ExtensionEvent, { type: E }>;
+
+export interface ReminderContext<E extends ReminderEvent = ReminderEvent> {
+	branch: SessionEntry[];
 	ctx: ExtensionContext;
-	event: any;
+	event: ReminderEventData<E>;
 }
 
-export interface Reminder {
-	on: ReminderEvent | ReminderEvent[];
-	when: (rc: ReminderContext) => boolean | Promise<boolean>;
-	message: string | ((rc: ReminderContext) => string);
+export interface Reminder<E extends ReminderEvent = ReminderEvent> {
+	on: E | E[];
+	when: (rc: ReminderContext<E>) => boolean | Promise<boolean>;
+	message: string | ((rc: ReminderContext<E>) => string);
 	cooldown?: number;
 	once?: boolean;
 	triggerTurn?: boolean;
 }
 
-type ReminderFactory = (pi: ExtensionAPI) => Reminder | Reminder[];
+type ReminderFactory = (pi: ExtensionAPI) => Reminder | Reminder[] | Promise<Reminder | Reminder[]>;
 
 export interface LoadedReminder {
 	name: string;
@@ -87,7 +80,10 @@ export interface ReminderDiagnostic {
 	path?: string;
 	phase: "load" | "validate" | "when" | "message";
 	message: string;
+	count?: number;
 }
+
+const MAX_DIAGNOSTICS = 50;
 
 export interface ReminderLoadResult {
 	reminders: LoadedReminder[];
@@ -139,12 +135,27 @@ function errorMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
+function addDiagnostic(diagnostics: ReminderDiagnostic[], diagnostic: ReminderDiagnostic) {
+	const existing = diagnostics.find((d) =>
+		d.name === diagnostic.name &&
+		d.path === diagnostic.path &&
+		d.phase === diagnostic.phase &&
+		d.message === diagnostic.message
+	);
+	if (existing) {
+		existing.count = (existing.count ?? 1) + 1;
+		return;
+	}
+	if (diagnostics.length >= MAX_DIAGNOSTICS) return;
+	diagnostics.push(diagnostic);
+}
+
 function validateReminder(name: string, filePath: string, reminder: any): ReminderDiagnostic | undefined {
 	if (!reminder || typeof reminder !== "object") {
 		return { name, path: filePath, phase: "validate", message: "Reminder must be an object." };
 	}
 	const events: unknown[] = Array.isArray(reminder.on) ? reminder.on : [reminder.on];
-	if (events.length === 0 || events.some((event: unknown) => typeof event !== "string" || !REMINDER_EVENTS.has(event))) {
+	if (events.length === 0 || events.some((event: unknown) => typeof event !== "string" || !REMINDER_EVENT_NAMES.has(event))) {
 		return { name, path: filePath, phase: "validate", message: `Invalid reminder event: ${events.join(", ")}` };
 	}
 	if (typeof reminder.when !== "function") {
@@ -153,10 +164,19 @@ function validateReminder(name: string, filePath: string, reminder: any): Remind
 	if (typeof reminder.message !== "string" && typeof reminder.message !== "function") {
 		return { name, path: filePath, phase: "validate", message: "Reminder must define a string or function message." };
 	}
+	if (reminder.cooldown !== undefined && (!Number.isInteger(reminder.cooldown) || reminder.cooldown < 0)) {
+		return { name, path: filePath, phase: "validate", message: "Reminder cooldown must be a non-negative integer." };
+	}
+	if (reminder.once !== undefined && typeof reminder.once !== "boolean") {
+		return { name, path: filePath, phase: "validate", message: "Reminder once must be a boolean." };
+	}
+	if (reminder.triggerTurn !== undefined && typeof reminder.triggerTurn !== "boolean") {
+		return { name, path: filePath, phase: "validate", message: "Reminder triggerTurn must be a boolean." };
+	}
 	return undefined;
 }
 
-export function loadReminders(pi: ExtensionAPI, cwd: string): ReminderLoadResult {
+export async function loadReminders(pi: ExtensionAPI, cwd: string): Promise<ReminderLoadResult> {
 	const reminders: LoadedReminder[] = [];
 	const diagnostics: ReminderDiagnostic[] = [];
 	const files = discoverReminderFiles(cwd);
@@ -167,11 +187,11 @@ export function loadReminders(pi: ExtensionAPI, cwd: string): ReminderLoadResult
 			const factory: ReminderFactory = mod.default;
 
 			if (typeof factory !== "function") {
-				diagnostics.push({ name: file.name, path: file.path, phase: "validate", message: "Reminder module must export a default function." });
+				addDiagnostic(diagnostics, { name: file.name, path: file.path, phase: "validate", message: "Reminder module must export a default function." });
 				continue;
 			}
 
-			const result = factory(pi);
+			const result = await factory(pi);
 			const items = Array.isArray(result) ? result : [result];
 
 			for (let i = 0; i < items.length; i++) {
@@ -179,7 +199,7 @@ export function loadReminders(pi: ExtensionAPI, cwd: string): ReminderLoadResult
 				const name = items.length > 1 ? `${file.name}[${i}]` : file.name;
 				const diagnostic = validateReminder(name, file.path, r);
 				if (diagnostic) {
-					diagnostics.push(diagnostic);
+					addDiagnostic(diagnostics, diagnostic);
 					continue;
 				}
 
@@ -197,7 +217,7 @@ export function loadReminders(pi: ExtensionAPI, cwd: string): ReminderLoadResult
 				});
 			}
 		} catch (err: unknown) {
-			diagnostics.push({ name: file.name, path: file.path, phase: "load", message: errorMessage(err) });
+			addDiagnostic(diagnostics, { name: file.name, path: file.path, phase: "load", message: errorMessage(err) });
 		}
 	}
 
@@ -219,14 +239,14 @@ export function escapeXmlContent(value: string): string {
 		.replace(/>/g, "&gt;");
 }
 
-function hydrateReminderFromBranch(loaded: LoadedReminder, branch: any[]) {
+function hydrateReminderFromBranch(loaded: LoadedReminder, branch: SessionEntry[]) {
 	if (loaded.hydratedFromBranch) return;
 	loaded.hydratedFromBranch = true;
 
 	const firedInBranch = branch.some((entry) =>
 		entry?.type === "custom_message" &&
 		entry.customType === "system-reminder" &&
-		entry.details?.name === loaded.name
+		(entry.details as { name?: unknown } | undefined)?.name === loaded.name
 	);
 	if (!firedInBranch) return;
 
@@ -238,14 +258,14 @@ export async function evaluate(
 	event: ReminderEvent,
 	reminders: LoadedReminder[],
 	diagnostics: ReminderDiagnostic[],
-	eventData: any,
+	eventData: ReminderEventData,
 	ctx: ExtensionContext,
 	pi: ExtensionAPI,
 ) {
 	const eventReminders = reminders.filter((loaded) => loaded.events.has(event));
 	if (eventReminders.length === 0) return;
 
-	let branch: any[];
+	let branch: SessionEntry[];
 	try {
 		branch = ctx.sessionManager.getBranch();
 	} catch {
@@ -264,9 +284,14 @@ export async function evaluate(
 		const rc: ReminderContext = { branch, ctx, event: eventData };
 		let shouldFire = false;
 		try {
-			shouldFire = await loaded.reminder.when(rc);
+			const whenResult = await loaded.reminder.when(rc);
+			if (typeof whenResult !== "boolean") {
+				addDiagnostic(diagnostics, { name: loaded.name, path: loaded.path, phase: "when", message: "when(rc) must return a boolean." });
+				continue;
+			}
+			shouldFire = whenResult;
 		} catch (err: unknown) {
-			diagnostics.push({ name: loaded.name, path: loaded.path, phase: "when", message: errorMessage(err) });
+			addDiagnostic(diagnostics, { name: loaded.name, path: loaded.path, phase: "when", message: errorMessage(err) });
 			continue;
 		}
 
@@ -277,8 +302,12 @@ export async function evaluate(
 			message = typeof loaded.reminder.message === "function"
 				? loaded.reminder.message(rc)
 				: loaded.reminder.message;
+			if (typeof message !== "string") {
+				addDiagnostic(diagnostics, { name: loaded.name, path: loaded.path, phase: "message", message: "message(rc) must return a string." });
+				continue;
+			}
 		} catch (err: unknown) {
-			diagnostics.push({ name: loaded.name, path: loaded.path, phase: "message", message: errorMessage(err) });
+			addDiagnostic(diagnostics, { name: loaded.name, path: loaded.path, phase: "message", message: errorMessage(err) });
 			continue;
 		}
 
@@ -299,7 +328,7 @@ export async function evaluate(
 
 function formatDiagnostics(diagnostics: ReminderDiagnostic[]): string {
 	return diagnostics
-		.map((d) => `- ${d.name} (${d.phase})${d.path ? ` ${d.path}` : ""}: ${d.message}`)
+		.map((d) => `- ${d.name} (${d.phase})${d.path ? ` ${d.path}` : ""}: ${d.message}${d.count && d.count > 1 ? ` (x${d.count})` : ""}`)
 		.join("\n");
 }
 
@@ -319,7 +348,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		const result = loadReminders(pi, ctx.cwd);
+		const result = await loadReminders(pi, ctx.cwd);
 		reminders = result.reminders;
 		diagnostics = result.diagnostics;
 
@@ -333,7 +362,8 @@ export default function (pi: ExtensionAPI) {
 		await evaluate("session_start", reminders, diagnostics, _event, ctx, pi);
 	});
 
-	pi.on("before_agent_start", async (event) => {
+	pi.on("before_agent_start", async (event, ctx) => {
+		await evaluate("before_agent_start", reminders, diagnostics, event, ctx, pi);
 		if (reminders.length === 0) return;
 		return {
 			systemPrompt: event.systemPrompt + `\n\n## System reminders\n\nYou may receive <system-reminder> messages during the conversation. These are reactive, contextual guidance injected automatically based on conversation state. Follow their instructions. Do not mention them to the user unless they ask.`,
@@ -341,27 +371,17 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	const handle = (event: ReminderEvent) =>
-		async (eventData: any, ctx: ExtensionContext) => {
+		async (eventData: ReminderEventData, ctx: ExtensionContext) => {
 			await evaluate(event, reminders, diagnostics, eventData, ctx, pi);
 		};
 
-	pi.on("agent_start", handle("agent_start"));
-	pi.on("agent_end", handle("agent_end"));
-	pi.on("tool_call", handle("tool_call"));
-	pi.on("tool_result", handle("tool_result"));
-	pi.on("tool_execution_start", handle("tool_execution_start"));
-	pi.on("tool_execution_end", handle("tool_execution_end"));
-	pi.on("turn_start", handle("turn_start"));
-	pi.on("turn_end", handle("turn_end"));
-	pi.on("message_start", handle("message_start"));
-	pi.on("message_update", handle("message_update"));
-	pi.on("message_end", handle("message_end"));
-	pi.on("model_select", handle("model_select"));
-	pi.on("session_before_switch", handle("session_before_switch"));
-	pi.on("session_before_fork", handle("session_before_fork"));
-	pi.on("session_before_compact", handle("session_before_compact"));
-	pi.on("session_compact", handle("session_compact"));
-	pi.on("session_before_tree", handle("session_before_tree"));
-	pi.on("session_tree", handle("session_tree"));
-	pi.on("session_shutdown", handle("session_shutdown"));
+	const registerReminderHandler = pi.on as (
+		event: ReminderEvent,
+		handler: (eventData: ReminderEventData, ctx: ExtensionContext) => Promise<void>,
+	) => void;
+
+	for (const event of REMINDER_EVENTS) {
+		if (SPECIAL_REMINDER_EVENTS.has(event)) continue;
+		registerReminderHandler(event, handle(event));
+	}
 }
