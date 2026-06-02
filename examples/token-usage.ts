@@ -11,6 +11,7 @@ export default function (_pi: ExtensionAPI) {
 			if (!usage) return false;
 			return usage.tokens > usage.contextWindow * 0.5;
 		},
+		triggerTurn: false,
 		message: ({ ctx }) => {
 			const usage = ctx.getContextUsage()!;
 			const remaining = usage.contextWindow - usage.tokens;

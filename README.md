@@ -51,7 +51,7 @@ Reload pi. After 3 failed bash calls, the agent sees:
 2. Project reminders override global reminders with the same name.
 3. Each file exports a default function receiving `ExtensionAPI` — same as pi extensions.
 4. The function returns a reminder: an event to listen on, a predicate, and a message.
-5. When the predicate returns true, a `<system-reminder>` steering message is injected into the conversation with `deliverAs: "steer"` and `triggerTurn: true`.
+5. When the predicate returns true, a `<system-reminder>` steering message is injected into the conversation with `deliverAs: "steer"` and `triggerTurn: true` by default.
 
 ## Security
 
@@ -82,6 +82,7 @@ export default function (pi: ExtensionAPI) {
     message: "text" | (rc) => "text",   // what to inject
     cooldown: 5,                        // skip N evaluations after firing
     once: true,                         // fire only once per session
+    triggerTurn: false,                 // optional: do not start a follow-up turn
   };
 }
 ```

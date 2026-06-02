@@ -7,6 +7,7 @@ export default function (pi: ExtensionAPI) {
 	return {
 		on: "session_start",
 		when: ({ event }) => event.reason === "resume",
+		triggerTurn: false,
 		message: "This session is being resumed. Application state may have changed since last time. Re-read relevant files before making assumptions about current state.",
 	};
 }

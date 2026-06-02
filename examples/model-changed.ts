@@ -7,6 +7,7 @@ export default function (_pi: ExtensionAPI) {
 	return {
 		on: "model_select",
 		when: ({ event }) => event.previousModel != null,
+		triggerTurn: false,
 		message: ({ event }) => {
 			const prev = `${event.previousModel.provider}/${event.previousModel.id}`;
 			const next = `${event.model.provider}/${event.model.id}`;

@@ -170,6 +170,92 @@ test('fired reminder sends steer message with triggerTurn and escaped XML', asyn
   assert.deepEqual(pi.messages[0].message.details, { name: 'bad"<name>', message: 'hello <world> & bye' });
 });
 
+test('reminder can opt out of triggering a follow-up turn', async () => {
+  const pi = fakePi();
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+  const reminders = [{
+    name: 'quiet',
+    reminder: { on: 'agent_start', when: () => true, message: 'quiet', triggerTurn: false },
+    events: new Set(['agent_start']),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/quiet.ts',
+  }];
+
+  await mod.evaluate('agent_start', reminders, diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 1);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
+});
+
+test('concise-output reminds without triggering a follow-up turn', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/concise-output.ts').default;
+  const reminder = factory(pi);
+  const loaded = {
+    name: 'concise-output',
+    reminder,
+    events: new Set([reminder.on]),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/concise-output.ts',
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+
+  await mod.evaluate('agent_start', [loaded], diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 1);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
+  assert.match(pi.messages[0].message.content, /Use as few words as possible/);
+});
+
+test('advisory examples opt out of triggering follow-up turns', () => {
+  const examples = [
+    'token-usage',
+    'context-large',
+    'task-tools-reminder',
+    'model-changed',
+    'session-resumed',
+    'post-compaction',
+    'file-empty',
+  ];
+
+  for (const example of examples) {
+    const pi = fakePi();
+    const factory = jiti(`../examples/${example}.ts`).default;
+    const reminder = factory(pi);
+    assert.equal(reminder.triggerTurn, false, example);
+  }
+});
+
+test('session-location reports session file without triggering a follow-up turn', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/session-location.ts').default;
+  const reminder = factory(pi);
+  const loaded = {
+    name: 'session-location',
+    reminder,
+    events: new Set([reminder.on]),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/session-location.ts',
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  ctx.sessionManager.getSessionFile = () => '/tmp/session.jsonl';
+  const diagnostics = [];
+
+  await mod.evaluate('agent_start', [loaded], diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 1);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
+  assert.match(pi.messages[0].message.content, /Current Pi session file: \/tmp\/session\.jsonl/);
+});
+
 test('malformed reminder reports diagnostics', () => withAgentDir((agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'broken.ts'), 'export default () => ({ on: "not_an_event", when: () => true, message: "x" });');

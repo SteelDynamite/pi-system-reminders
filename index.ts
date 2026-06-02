@@ -66,6 +66,7 @@ export interface Reminder {
 	message: string | ((rc: ReminderContext) => string);
 	cooldown?: number;
 	once?: boolean;
+	triggerTurn?: boolean;
 }
 
 type ReminderFactory = (pi: ExtensionAPI) => Reminder | Reminder[];
@@ -270,7 +271,7 @@ export async function evaluate(
 				display: true,
 				details: { name: loaded.name, message },
 			},
-			{ deliverAs: "steer", triggerTurn: true },
+			{ deliverAs: "steer", triggerTurn: loaded.reminder.triggerTurn ?? true },
 		);
 
 		loaded.lastFiredAt = loaded.evalCount;

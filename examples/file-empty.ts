@@ -29,6 +29,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			return false;
 		},
+		triggerTurn: false,
 		message: () => `Warning: the file ${emptyFileName} exists but the contents are empty.`,
 	};
 }
