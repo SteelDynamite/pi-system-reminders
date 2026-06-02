@@ -226,6 +226,7 @@ test('advisory examples opt out of triggering follow-up turns', () => {
     'session-resumed',
     'post-compaction',
     'file-empty',
+    'malware-awareness',
   ];
 
   for (const example of examples) {
@@ -289,15 +290,14 @@ test('session-location falls back to agent_start when session file is unavailabl
   assert.match(pi.messages[0].message.content, /Current Pi session file: \/tmp\/session\.jsonl/);
 });
 
-test('malware-awareness emits a startup reminder without triggering a turn', async () => {
+test('malware-awareness is one reminder with startup and read triggers', async () => {
   const pi = fakePi();
   const factory = jiti('../examples/malware-awareness.ts').default;
-  const reminders = factory(pi);
-  const startup = reminders.find((reminder) => reminder.on === 'session_start');
+  const reminder = factory(pi);
   const loaded = {
-    name: 'malware-awareness[0]',
-    reminder: startup,
-    events: reminderEvents(startup),
+    name: 'malware-awareness',
+    reminder,
+    events: reminderEvents(reminder),
     evalCount: 0,
     lastFiredAt: -Infinity,
     fired: false,
@@ -307,22 +307,23 @@ test('malware-awareness emits a startup reminder without triggering a turn', asy
   const diagnostics = [];
 
   await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
-  await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
 
+  assert.deepEqual(reminder.on, ['session_start', 'tool_execution_end']);
+  assert.equal(reminder.cooldown, 20);
   assert.equal(pi.messages.length, 1);
   assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
   assert.match(pi.messages[0].message.content, /consider whether it could be malware/);
 });
 
-test('malware-awareness read reminder skips empty reads and keeps cooldown', async () => {
-  const pi = fakePi();
+test('malware-awareness skips empty reads and shares cooldown with startup', async () => {
   const factory = jiti('../examples/malware-awareness.ts').default;
-  const reminders = factory(pi);
-  const readReminder = reminders.find((reminder) => reminder.on === 'tool_execution_end');
+
+  const pi = fakePi();
+  const reminder = factory(pi);
   const loaded = {
-    name: 'malware-awareness[1]',
-    reminder: readReminder,
-    events: reminderEvents(readReminder),
+    name: 'malware-awareness',
+    reminder,
+    events: reminderEvents(reminder),
     evalCount: 0,
     lastFiredAt: -Infinity,
     fired: false,
@@ -338,12 +339,23 @@ test('malware-awareness read reminder skips empty reads and keeps cooldown', asy
   };
 
   await emitRead([{ type: 'text', text: '   ' }]);
+  assert.equal(pi.messages.length, 0);
   await emitRead([{ type: 'text', text: 'code' }]);
-  await emitRead([{ type: 'text', text: 'more code' }]);
-
   assert.equal(pi.messages.length, 1);
-  assert.equal(readReminder.cooldown, 20);
-  assert.match(pi.messages[0].message.content, /consider whether it could be malware/);
+
+  const pi2 = fakePi();
+  const reminder2 = factory(pi2);
+  const loaded2 = { ...loaded, reminder: reminder2, events: reminderEvents(reminder2), evalCount: 0, lastFiredAt: -Infinity, fired: false };
+  const emitRead2 = async (content) => {
+    for (const handler of pi2.handlers.get('tool_result') ?? []) {
+      await handler({ toolName: 'read', isError: false, content }, ctx);
+    }
+    await mod.evaluate('tool_execution_end', [loaded2], diagnostics, { toolName: 'read' }, ctx, pi2);
+  };
+
+  await mod.evaluate('session_start', [loaded2], diagnostics, {}, ctx, pi2);
+  await emitRead2([{ type: 'text', text: 'more code' }]);
+  assert.equal(pi2.messages.length, 1);
 });
 
 test('malformed reminder reports diagnostics', () => withAgentDir((agentDir) => {
