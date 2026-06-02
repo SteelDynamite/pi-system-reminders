@@ -64,6 +64,10 @@ function writeProjectReminder(cwd, source, name = 'example.ts') {
   write(path.join(cwd, '.pi', 'reminders', name), source);
 }
 
+function reminderEvents(reminder) {
+  return new Set(Array.isArray(reminder.on) ? reminder.on : [reminder.on]);
+}
+
 test('discovers global reminders', () => withAgentDir((agentDir) => {
   const cwd = tempDir();
   write(path.join(agentDir, 'reminders', 'global.ts'), 'export default () => ({ on: "turn_end", when: () => false, message: "global" });');
@@ -227,19 +231,20 @@ test('advisory examples opt out of triggering follow-up turns', () => {
   for (const example of examples) {
     const pi = fakePi();
     const factory = jiti(`../examples/${example}.ts`).default;
-    const reminder = factory(pi);
-    assert.equal(reminder.triggerTurn, false, example);
+    const result = factory(pi);
+    const reminders = Array.isArray(result) ? result : [result];
+    assert.ok(reminders.some((reminder) => reminder.triggerTurn === false), example);
   }
 });
 
-test('session-location reports session file without triggering a follow-up turn', async () => {
+test('session-location reports session file at startup without triggering a turn', async () => {
   const pi = fakePi();
   const factory = jiti('../examples/session-location.ts').default;
   const reminder = factory(pi);
   const loaded = {
     name: 'session-location',
     reminder,
-    events: new Set([reminder.on]),
+    events: reminderEvents(reminder),
     evalCount: 0,
     lastFiredAt: -Infinity,
     fired: false,
@@ -249,11 +254,96 @@ test('session-location reports session file without triggering a follow-up turn'
   ctx.sessionManager.getSessionFile = () => '/tmp/session.jsonl';
   const diagnostics = [];
 
+  await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
   await mod.evaluate('agent_start', [loaded], diagnostics, {}, ctx, pi);
 
   assert.equal(pi.messages.length, 1);
   assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
   assert.match(pi.messages[0].message.content, /Current Pi session file: \/tmp\/session\.jsonl/);
+});
+
+test('session-location falls back to agent_start when session file is unavailable at startup', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/session-location.ts').default;
+  const reminder = factory(pi);
+  const loaded = {
+    name: 'session-location',
+    reminder,
+    events: reminderEvents(reminder),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/session-location.ts',
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  let sessionFile;
+  ctx.sessionManager.getSessionFile = () => sessionFile;
+  const diagnostics = [];
+
+  await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
+  sessionFile = '/tmp/session.jsonl';
+  await mod.evaluate('agent_start', [loaded], diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 1);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
+  assert.match(pi.messages[0].message.content, /Current Pi session file: \/tmp\/session\.jsonl/);
+});
+
+test('malware-awareness emits a startup reminder without triggering a turn', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/malware-awareness.ts').default;
+  const reminders = factory(pi);
+  const startup = reminders.find((reminder) => reminder.on === 'session_start');
+  const loaded = {
+    name: 'malware-awareness[0]',
+    reminder: startup,
+    events: reminderEvents(startup),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/malware-awareness.ts',
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+
+  await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
+  await mod.evaluate('session_start', [loaded], diagnostics, {}, ctx, pi);
+
+  assert.equal(pi.messages.length, 1);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'steer', triggerTurn: false });
+  assert.match(pi.messages[0].message.content, /consider whether it could be malware/);
+});
+
+test('malware-awareness read reminder skips empty reads and keeps cooldown', async () => {
+  const pi = fakePi();
+  const factory = jiti('../examples/malware-awareness.ts').default;
+  const reminders = factory(pi);
+  const readReminder = reminders.find((reminder) => reminder.on === 'tool_execution_end');
+  const loaded = {
+    name: 'malware-awareness[1]',
+    reminder: readReminder,
+    events: reminderEvents(readReminder),
+    evalCount: 0,
+    lastFiredAt: -Infinity,
+    fired: false,
+    path: '/tmp/malware-awareness.ts',
+  };
+  const ctx = fakeCtx(tempDir(), [{}]);
+  const diagnostics = [];
+  const emitRead = async (content) => {
+    for (const handler of pi.handlers.get('tool_result') ?? []) {
+      await handler({ toolName: 'read', isError: false, content }, ctx);
+    }
+    await mod.evaluate('tool_execution_end', [loaded], diagnostics, { toolName: 'read' }, ctx, pi);
+  };
+
+  await emitRead([{ type: 'text', text: '   ' }]);
+  await emitRead([{ type: 'text', text: 'code' }]);
+  await emitRead([{ type: 'text', text: 'more code' }]);
+
+  assert.equal(pi.messages.length, 1);
+  assert.equal(readReminder.cooldown, 20);
+  assert.match(pi.messages[0].message.content, /consider whether it could be malware/);
 });
 
 test('malformed reminder reports diagnostics', () => withAgentDir((agentDir) => {

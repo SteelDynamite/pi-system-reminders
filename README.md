@@ -143,13 +143,13 @@ The examples are Claude-inspired and are not exact copies of Claude Code prompts
 | `file-churn.ts` | Same file edited 5+ times → step back |
 | `file-empty.ts` | Read returned empty file → warn |
 | `file-truncated.ts` | Read was truncated → use offset |
-| `malware-awareness.ts` | After read → consider if content is malicious |
+| `malware-awareness.ts` | Startup and non-empty reads → consider if content is malicious |
 | `model-changed.ts` | Model switched → capabilities may differ |
 | `new-diagnostics.ts` | Warn after diagnostic/test commands report failures |
 | `post-compaction.ts` | After compaction → file contents may be lost |
 | `prefer-edit.ts` | 3+ writes → use edit for surgical changes |
 | `read-before-edit.ts` | Edit without read → warn about stale content |
-| `session-location.ts` | First agent turn → report the active Pi session file |
+| `session-location.ts` | Startup, with first-turn fallback → report the active Pi session file |
 | `session-resumed.ts` | Session resumed → state may have changed |
 | `task-tools-reminder.ts` | 20 tool calls without tasks → gentle nudge |
 | `token-usage.ts` | Over 50% context → show token stats |

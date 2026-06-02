@@ -1,17 +1,18 @@
 /**
- * Report the active Pi session file once, when the first agent turn starts.
+ * Report the active Pi session file once at startup.
  *
- * Using agent_start avoids making the agent speak before the first user prompt.
- * triggerTurn: false avoids starting an extra follow-up model turn after reporting.
+ * session_start gives the agent the path before work begins. agent_start is a
+ * fallback for runtimes where the session file is not available at startup.
+ * triggerTurn: false avoids starting a pre-prompt or extra follow-up turn.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (_pi: ExtensionAPI) {
 	return {
-		on: "agent_start",
+		on: ["session_start", "agent_start"],
 		once: true,
 		triggerTurn: false,
-		when: ({ ctx }) => Boolean(ctx.sessionManager.getSessionFile()),
+		when: ({ ctx }) => Boolean(ctx.sessionManager.getSessionFile?.()),
 		message: ({ ctx }) => `Current Pi session file: ${ctx.sessionManager.getSessionFile()}`,
 	};
 }
