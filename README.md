@@ -4,7 +4,7 @@ Reactive system reminders for [pi](https://github.com/badlogic/pi-mono). Claude 
 
 No reminders are active by default. Install this extension, then copy or write reminder files in one of the discovery locations below.
 
-Drop a `.ts` file in a folder, get a reactive reminder that watches conversation state and steers the agent when conditions are met. Same DX as pi extensions — export a default function, get the full `ExtensionAPI`.
+Drop a `.ts` file in a folder, get a reactive reminder that watches conversation state and steers the agent when conditions are met. Same DX as pi extensions — export a default function and receive the Pi extension API object.
 
 ## Install
 
@@ -17,7 +17,7 @@ pi install npm:pi-system-reminders
 Create `.pi/reminders/bash-spiral.ts`:
 
 ```typescript
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
   let consecutiveFailures = 0;
@@ -49,7 +49,7 @@ Reload pi. After 3 failed bash calls, the agent sees:
 
 1. Extension discovers top-level `*.ts` files and one-level directory `index.ts` files from `~/.pi/agent/reminders/` (global) and `.pi/reminders/` (project-local).
 2. Project reminders override global reminders with the same name.
-3. Each file exports a sync or async default function receiving `ExtensionAPI` — same as pi extensions.
+3. Each file exports a sync or async default function receiving the Pi extension API object — same as pi extensions.
 4. The function returns a reminder: an event to listen on, a predicate, and a message.
 5. When the predicate returns true, a `<system-reminder>` steering message is injected into the conversation with `deliverAs: "steer"` and `triggerTurn: true` by default.
 
@@ -73,7 +73,7 @@ Broken reminders are reported at startup. Run `/reminders` to list loaded remind
 ## Reminder shape
 
 ```typescript
-export default function (pi: ExtensionAPI) {
+export default function (pi) {
   // Use pi.on() to track state, pi.exec() to run commands, etc.
 
   return {

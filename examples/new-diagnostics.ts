@@ -1,7 +1,7 @@
 /**
  * Remind the agent when a diagnostic command reports problems.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	let diagnosticCommand = "";

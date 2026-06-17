@@ -1,7 +1,7 @@
 /**
  * After compaction, remind the agent that file contents may have been summarized away.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (_pi: ExtensionAPI) {
 	return {

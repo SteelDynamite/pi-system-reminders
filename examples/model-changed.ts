@@ -1,9 +1,12 @@
 /**
  * Notify the agent when the model changes mid-session.
  */
-import type { ExtensionAPI, ExtensionEvent } from "@earendil-works/pi-coding-agent";
-
-type ModelSelectReminderEvent = Extract<ExtensionEvent, { type: "model_select" }>;
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
+type ModelSelectReminderEvent = {
+	type: "model_select";
+	model: { provider: string; id: string };
+	previousModel?: { provider: string; id: string } | null;
+};
 
 export default function (_pi: ExtensionAPI) {
 	return {

@@ -2,7 +2,7 @@
  * Remind the agent when a file changed on disk after it was read.
  */
 import * as fs from "node:fs";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 function mtimeMs(filePath: string): number | undefined {
 	try {

@@ -1,7 +1,7 @@
 /**
  * Remind the agent to keep responses short and concise.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (_pi: ExtensionAPI) {
 	return {

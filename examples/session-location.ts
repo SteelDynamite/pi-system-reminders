@@ -6,7 +6,10 @@
  * It stays quiet on /reload and /resume so old sessions are not re-announced.
  * triggerTurn: false avoids starting a pre-prompt or extra follow-up turn.
  */
-import type { AgentStartEvent, ExtensionAPI, ExtensionContext, SessionStartEvent } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
+type ExtensionContext = { sessionManager: { getSessionFile(): string | undefined } };
+type SessionStartEvent = { type: "session_start"; reason?: string };
+type AgentStartEvent = { type: "agent_start" };
 
 export default function (_pi: ExtensionAPI) {
 	let suppressFallback = false;

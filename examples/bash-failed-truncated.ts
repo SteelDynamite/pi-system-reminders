@@ -1,7 +1,7 @@
 /**
  * Warn when a failed bash command's output was truncated.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 function textContent(content: unknown): string {
 	if (!Array.isArray(content)) return "";

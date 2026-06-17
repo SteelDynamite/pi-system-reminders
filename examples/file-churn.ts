@@ -2,7 +2,7 @@
  * Remind the agent when it keeps editing the same file repeatedly.
  * Uses per-runtime closure state; not branch-aware after /tree, /fork, /clone, or /resume.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	const editCounts = new Map<string, number>();

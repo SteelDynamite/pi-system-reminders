@@ -2,7 +2,7 @@
  * Remind the agent to read a file before editing it.
  * Uses per-runtime closure state; not branch-aware after /tree, /fork, /clone, or /resume.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	const readFiles = new Set<string>();

@@ -1,7 +1,8 @@
 /**
  * Remind the agent when a session is resumed, as application state may have changed.
  */
-import type { ExtensionAPI, SessionStartEvent } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
+type SessionStartEvent = { type: "session_start"; reason?: string };
 
 export default function (_pi: ExtensionAPI) {
 	return {

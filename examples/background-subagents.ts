@@ -1,7 +1,7 @@
 /**
  * After spawning background subagents, remind the main agent not to duplicate their work.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	let backgroundSubagentSpawned = false;

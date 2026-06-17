@@ -1,7 +1,7 @@
 /**
  * Remind the agent to report failed or skipped verification honestly.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	let hadFailure = false;

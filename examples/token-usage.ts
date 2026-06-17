@@ -1,7 +1,8 @@
 /**
  * Show token usage when context exceeds 50% capacity.
  */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
+type ExtensionContext = { getContextUsage(): { tokens?: number | null; contextWindow: number } | undefined };
 
 export default function (_pi: ExtensionAPI) {
 	return {

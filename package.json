@@ -13,6 +13,7 @@
   ],
   "files": [
     "index.ts",
+    "pi-types.ts",
     "examples",
     "README.md"
   ],
@@ -24,13 +25,9 @@
   "dependencies": {
     "jiti": "^2.0.0"
   },
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
-  },
   "author": "michaelliv",
   "license": "MIT",
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0"
   }

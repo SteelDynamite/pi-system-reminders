@@ -2,7 +2,7 @@
  * Remind the agent to use task tracking tools if they haven't been used recently.
  * Uses per-runtime closure state; not branch-aware after /tree, /fork, /clone, or /resume.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	let toolCallsSinceLastTask = 0;

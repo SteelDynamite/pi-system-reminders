@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createJiti } from "jiti";
-import type { ExtensionAPI, ExtensionContext, ExtensionEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ExtensionEvent, SessionEntry } from "./pi-types";
 
 const jiti = createJiti(__filename, { moduleCache: false });
 

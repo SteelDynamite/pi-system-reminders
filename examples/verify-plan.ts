@@ -1,7 +1,7 @@
 /**
  * Remind the agent to verify completed plan/task work directly.
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+type ExtensionAPI = { on(event: string, handler: (event: any, ctx: any) => unknown): void };
 
 export default function (pi: ExtensionAPI) {
 	let completedTasksSinceVerification = 0;
