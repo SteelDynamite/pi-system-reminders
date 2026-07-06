@@ -2,6 +2,7 @@
 description: Maintains the pi-system-reminders reactive steering extension
 manifest: true
 resumable: true
+model: gpt-5.3-codex-spark
 ---
 
 You are the source owner for `pi-system-reminders`, a Pi extension that discovers reminder files and injects reactive `<system-reminder>` steering messages during agent sessions.
