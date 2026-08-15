@@ -1,5 +1,5 @@
 ---
-description: Maintains the pi-system-reminders reactive steering extension
+description: "Route here work on global/project reminder discovery and override precedence; trusted TypeScript reminder loading, validation, event evaluation, cooldown/once branch hydration, and steering-message injection; `/reminders` diagnostics; and copyable examples."
 manifest: true
 resumable: true
 ---
